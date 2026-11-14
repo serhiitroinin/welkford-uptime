@@ -1,0 +1,86 @@
+name: uptime
+# Self-contained on purpose: no checkout, no secrets, only public URLs.
+# Copied from the private app repo's .github/workflows/uptime.yml (PR #5) so
+# the schedule runs here, in a public repo, where Actions minutes are free.
+# Only the env block and the check lines below say what is checked.
+#
+# A failed run is the alert: GitHub emails a failed scheduled run to whoever
+# last changed the cron line. GitHub also delays scheduled runs by minutes
+# under load, so this catches outages, not blips.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+    # Weekly keepalive. GitHub switches schedules off in a public repo after
+    # 60 days without activity; the keepalive job re-enables this workflow.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+permissions: {}
+env:
+  SITE: https://welkford.com
+  UK_SITE: https://welkford.co.uk
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Worst case, every request hanging to its limit: health 3 x 15 s + 2 x 10 s
+    # = 65 s, then 4 pages x (3 x 15 s + 3 s of curl backoff) = 192 s. About
+    # 4.3 min, plus runner start-up, inside 6.
+    timeout-minutes: 6
+    steps:
+      # First, so a slow page cannot use up the job's time before it runs.
+      # 200 with "ok": true, or the job fails. Until the health endpoint is
+      # deployed it answers 404; that one code is a warning, not a failure
+      # (see README: delete the 404 lines once /api/health is live). Only the
+      # reason codes reach the log (this repo is public), never the body. Any
+      # other non-200 is retried twice, 10 s apart, so one cold start or slow
+      # Convex answer is not an alert.
+      - name: Health endpoint reports healthy
+        run: |
+          url="$SITE/api/health"
+          code=000
+          for attempt in 1 2 3; do
+            rm -f health.json
+            code=$(curl -sS -o health.json -w '%{http_code}' --connect-timeout 10 --max-time 15 "$url") || code=000
+            [ "$code" = 200 ] && break
+            [ "$code" = 404 ] && break
+            echo "attempt $attempt: HTTP $code"
+            [ "$attempt" = 3 ] || sleep 10
+          done
+          if [ "$code" = 200 ] && jq -e '.ok == true' health.json >/dev/null 2>&1; then
+            jq -r '.warnings[]? | "::warning::health: " + .' health.json
+            echo "ok $url"
+            exit 0
+          fi
+          if [ "$code" = 404 ]; then
+            echo "::warning::$url answered 404: health endpoint not deployed yet, skipped"
+            exit 0
+          fi
+          jq -r '.failures[]? | "::error::health: " + .' health.json 2>/dev/null || true
+          echo "::error::$url answered HTTP $code (README lists where the codes are documented)"
+          exit 1
+
+      - name: Pages answer with their expected words
+        if: ${{ !cancelled() }}
+        run: |
+          check() {
+            body=$(curl -fsSL --retry 2 --retry-all-errors --connect-timeout 10 --max-time 15 "$1") || { echo "::error::$1 did not answer"; return 1; }
+            echo "$body" | grep -q "$2" || { echo "::error::$1 answered without \"$2\""; return 1; }
+            echo "ok $1"
+          }
+          fail=0
+          check "$SITE/" "Paste your plates below" || fail=1
+          check "$SITE/guides" "TechMan" || fail=1
+          check "$SITE/signin" "Welkford" || fail=1
+          check "$UK_SITE/" "part of Welkford" || fail=1
+          exit $fail
+
+  keepalive:
+    if: github.event.schedule == '17 6 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Keep this schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/uptime.yml/enable"
