@@ -60,7 +60,7 @@ jobs:
             echo "ok $1"
           }
           fail=0
-          check "$SITE/" "Paste your plates below" || fail=1
+          check "$SITE/" "Paste your registrations" || fail=1
           check "$SITE/guides" "TechMan" || fail=1
           check "$SITE/signin" "Welkford" || fail=1
           check "$UK_SITE/" "part of Welkford" || fail=1

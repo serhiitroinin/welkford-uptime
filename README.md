@@ -18,7 +18,7 @@ Actions tab):
 
    | URL | Expected text |
    |---|---|
-   | https://welkford.com/ | `Paste your plates below` |
+   | https://welkford.com/ | `Paste your registrations` |
    | https://welkford.com/guides | `TechMan` |
    | https://welkford.com/signin | `Welkford` |
    | https://welkford.co.uk/ | `part of Welkford` |
