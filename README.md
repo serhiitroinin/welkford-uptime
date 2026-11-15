@@ -13,8 +13,7 @@ Actions tab):
 
 1. `GET https://welkford.com/api/health` must answer 200 with `"ok": true`.
    Warnings show as yellow annotations. Only reason codes are logged, never
-   the response body. **For now a 404 is tolerated** (warning, run stays
-   green) because the endpoint is not deployed yet.
+   the response body. Any other answer, 404 included, fails the run.
 2. These public pages must answer and contain their expected words:
 
    | URL | Expected text |
@@ -32,13 +31,10 @@ A `keepalive` job runs every Monday at 06:17 UTC and re-enables the workflow,
 because GitHub switches off schedules in public repos after 60 days without
 activity.
 
-## Once /api/health is live
+## Health reason codes
 
-When `curl -s https://welkford.com/api/health` returns 200 with `"ok": true`,
-delete the two 404 blocks in the health step (the `[ "$code" = 404 ] && break`
-line and the `if [ "$code" = 404 ]` block) so a missing endpoint fails the run
-again. The meaning of each health reason code is documented in the private
-app repo under `docs/uptime.md`.
+The meaning of each health reason code is documented in the private app repo
+under `docs/uptime.md`.
 
 ## Keep the private-repo schedule disabled
 

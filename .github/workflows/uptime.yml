@@ -27,12 +27,10 @@ jobs:
     timeout-minutes: 6
     steps:
       # First, so a slow page cannot use up the job's time before it runs.
-      # 200 with "ok": true, or the job fails. Until the health endpoint is
-      # deployed it answers 404; that one code is a warning, not a failure
-      # (see README: delete the 404 lines once /api/health is live). Only the
-      # reason codes reach the log (this repo is public), never the body. Any
-      # other non-200 is retried twice, 10 s apart, so one cold start or slow
-      # Convex answer is not an alert.
+      # 200 with "ok": true, or the job fails. Only the reason codes reach the
+      # log (this repo is public), never the body. Any non-200 is retried
+      # twice, 10 s apart, so one cold start or slow Convex answer is not an
+      # alert.
       - name: Health endpoint reports healthy
         run: |
           url="$SITE/api/health"
@@ -41,17 +39,12 @@ jobs:
             rm -f health.json
             code=$(curl -sS -o health.json -w '%{http_code}' --connect-timeout 10 --max-time 15 "$url") || code=000
             [ "$code" = 200 ] && break
-            [ "$code" = 404 ] && break
             echo "attempt $attempt: HTTP $code"
             [ "$attempt" = 3 ] || sleep 10
           done
           if [ "$code" = 200 ] && jq -e '.ok == true' health.json >/dev/null 2>&1; then
             jq -r '.warnings[]? | "::warning::health: " + .' health.json
             echo "ok $url"
-            exit 0
-          fi
-          if [ "$code" = 404 ]; then
-            echo "::warning::$url answered 404: health endpoint not deployed yet, skipped"
             exit 0
           fi
           jq -r '.failures[]? | "::error::health: " + .' health.json 2>/dev/null || true
